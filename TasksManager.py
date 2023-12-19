@@ -6,15 +6,19 @@ import requests, sqlite3, json, datetime, openpyxl, asyncio, random
 prefix = '-'
 bot = commands.Bot(command_prefix=prefix, intents=discord.Intents.all())  #Discord bot
 botAuthorID = 503484838029033483
+configFile = 'config.json'
+languagePackageFile = 'surface_language.json'
 
 #Files checking -----------------------------------------------------------------------------------
 
 #Check json config file
 def LoadConfigFile():
-    fileName = "config.json"
+    global configFile
+    global languagePackageFile
     isConfigExists = False  #check if config file exists or not
+
     try:
-        with open(fileName, 'r', encoding="utf-8") as configFile:
+        with open(configFile, 'r', encoding="utf-8") as configFile:
             configData = json.load(configFile)
 
             #if except situation doesn't appear
@@ -28,19 +32,26 @@ def LoadConfigFile():
 
     if isConfigExists == False:
         print("Config file is not found. Ready to create one.")
-        with open(fileName, 'w', encoding="utf-8") as newConfigFile:
+        with open(configFile, 'w', encoding="utf-8") as newConfigFile:
             modifyTime = str(datetime.datetime.now())
             configInit = {
-                "CreatedTime" : modifyTime
+                "CreatedTime" : modifyTime,
+                "LastModifiedTime" : modifyTime
             }
-            configInit["LastModifiedTime"] = modifyTime
+
+            #load language package
+            with open(languagePackageFile, 'r') as langPackage:
+                data = json.load(langPackage)
+                configInit["Language"] = data[0]["Language"]
 
             json.dump(configInit, newConfigFile, indent=2, ensure_ascii=False)
             print("Created config file.")
 
             return configInit    
-
+        
+print("------ Checking config file ------")
 botConfig = LoadConfigFile()  #setting config data from json file
+print()
 
 #Check schedule list in excel workbook
 def LoadScheduleList():
@@ -70,8 +81,10 @@ def LoadScheduleList():
 
         return sheet.title
 
+print("------ Checking excel workbooks ------")
 #invoke the function for checking the existence of excel workbook everytime while launching
 sheetTitle = LoadScheduleList()
+print()
 
 #Bot events ---------------------------------------------------------------------------------------
 
@@ -100,11 +113,17 @@ async def on_message(msg):  #When bot listened specific message from user
     if "114" in msg.content:
         await msg.reply("114514", mention_author=False)
 
+    if "一個" in msg.content:
+        await msg.reply("你是一個 一個一個 哼哼哼啊啊啊啊啊啊", mention_author=False)
+
 #Bot slash commands -------------------------------------------------------------------------------
 
-@bot.tree.command(name="info")  #Enter the name to use this command function
+@bot.tree.command(name="info", description="Bot introduction.")  #Enter the name to use this command function
 async def Introduce(interaction : discord.Interaction):
     botAuthor = await bot.fetch_user(botAuthorID)  #fetch the author
+
+    with open(configFile.name, 'r', encoding='utf-8') as config:
+        configData = json.load(config)
 
     #create main embed introduction
     infoEmbed = discord.Embed(
@@ -115,11 +134,13 @@ async def Introduce(interaction : discord.Interaction):
         timestamp=datetime.datetime.now()
     )
     #set other decorations
-    infoEmbed.set_author(name=botAuthor.name)
+    infoEmbed.set_author(name=f"Author : {botAuthor.name}")
     infoEmbed.set_thumbnail(url=botAuthor.avatar.url)
     infoEmbed.set_footer(text="114514")
 
-    await interaction.response.send_message(embed=infoEmbed, ephemeral=True)
+    infoEmbed.add_field(name="Language :", value=configData['Language'])
+
+    await interaction.response.send_message(embed=infoEmbed, ephemeral=False)
     #If ephemeral = True, that means only you can see the reply.
 
 @bot.tree.command(name="reply")
@@ -127,10 +148,70 @@ async def Introduce(interaction : discord.Interaction):
 async def reply(interaction : discord.Interaction, ctx : str):
     await interaction.response.send_message(f'Hi, {interaction.user.name}. You just entered `{ctx}`.', ephemeral=True)
 
+@bot.tree.command(name="setyourtimeunit", description="Set time unit to measure the total time each task needs.")
+@app_commands.describe(time="If you type '30', it means it takes 30/60/90... MINUTES to finish your each task")
+async def setTimeUnit(interaction : discord.Interaction, time : int):
+    with open(configFile.name, 'r', encoding='utf-8') as config:
+        configData = json.load(config)
+
+    try:
+        with open(configFile.name, 'w', encoding='utf-8') as config:
+            configData['TimeUnit'] = time
+            configData['LastModifiedTime'] = str(datetime.datetime.now())
+            json.dump(configData, config, indent=2, ensure_ascii=False)
+
+            print(f"Modified config file at {configData['LastModifiedTime']}")
+            print(f"Changed time unit into {configData['TimeUnit']}")
+
+            await interaction.response.send_message(f"Modified time unit to {configData['TimeUnit']}", ephemeral=False)
+    except Exception as ex:
+        print(ex)
+        await interaction.response.send_message("Error, please enter digits!", ephemeral=True)
+
+#Config commands --------------------------------
 @bot.tree.command(name="config", description="Check the bot config.")
 async def checkConfig(interaction : discord.Interaction):
-    await interaction.response.send_message(f"Bot config :\n{botConfig}", ephemeral=True)
+    with open(configFile.name, 'r', encoding='utf-8') as config:
+        configData = json.load(config)
+    await interaction.response.send_message(f"Bot config :\n{configData}", ephemeral=False)
 
+@bot.tree.command(name="changelanguage", description="Change your surface language.")
+@app_commands.describe(language="Type en/ch/jp/kr, en:English, ch:Chinese, jp:Japanese, kr:Korean.")
+async def changeLanguage(interaction : discord.Interaction, language : str):
+    global configFile
+    global languagePackageFile
+
+    isNotChanged = False
+    with open(configFile.name, 'r', encoding="utf-8") as config:
+        configData = json.load(config)
+
+    with open(configFile.name, 'w', encoding="utf-8") as config:
+        with open(languagePackageFile, 'r') as langPackage:
+            data = json.load(langPackage)
+            match language:
+                case 'en':
+                    configData["Language"] = data[0]["Language"]
+                case 'ch':
+                    configData["Language"] = data[1]["Language"]
+                case 'jp':
+                    configData["Language"] = data[2]["Language"]
+                case 'kr':
+                    configData["Language"] = data[3]["Language"]
+                case _:
+                    isNotChanged = True  #language isn't changed
+                    await interaction.response.send_message("Error, enter again.", ephemeral=True)
+            
+            if not isNotChanged:
+                configData['LastModifiedTime'] = str(datetime.datetime.now())
+                print(f"Modified config file at {configData['LastModifiedTime']}")
+            
+            json.dump(configData, config, indent=2, ensure_ascii=False)
+            
+    if not isNotChanged:  #if language changed
+        await interaction.response.send_message(f"Surface language is {configData['Language']} now.", ephemeral=False)
+        print(f"Change language into {configData['Language']}")
+
+#Excel commands ---------------------------------
 @bot.tree.command(name="todolist", description="test command to see the title of worksheet.")
 async def checkScheduleList(interaction : discord.Interaction):
     await interaction.response.send_message(f"Worksheet title :\n{sheetTitle}", ephemeral=True)
