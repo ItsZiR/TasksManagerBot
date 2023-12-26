@@ -101,9 +101,16 @@ async def on_ready():  #When bot launched
         while True:
             num = random.randint(0, len(status)-1)  #pick a status index randomly
             await bot.change_presence(status=discord.Status.online, activity=discord.Game(name=status[num]))
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)
     except Exception as ex:
         print(ex)
+
+'''
+@bot.event
+async def on_raw_reaction_add(reaction : discord.RawReactionActionEvent):
+    channel = bot.get_channel(reaction.channel_id)                       
+    await channel.send(reaction.message_id)
+'''
 
 @bot.event
 async def on_message(msg):  #When bot listened specific message from user
@@ -117,7 +124,7 @@ async def on_message(msg):  #When bot listened specific message from user
         await msg.reply("你是一個 一個一個 哼哼哼啊啊啊啊啊啊", mention_author=False)
 
 #Bot slash commands -------------------------------------------------------------------------------
-
+        
 @bot.tree.command(name="info", description="Bot introduction.")  #Enter the name to use this command function
 async def Introduce(interaction : discord.Interaction):
     botAuthor = await bot.fetch_user(botAuthorID)  #fetch the author
@@ -148,25 +155,40 @@ async def Introduce(interaction : discord.Interaction):
 async def reply(interaction : discord.Interaction, ctx : str):
     await interaction.response.send_message(f'Hi, {interaction.user.name}. You just entered `{ctx}`.', ephemeral=True)
 
-@bot.tree.command(name="setyourtimeunit", description="Set time unit to measure the total time each task needs.")
-@app_commands.describe(time="If you type '30', it means it takes 30/60/90... MINUTES to finish your each task")
-async def setTimeUnit(interaction : discord.Interaction, time : int):
-    with open(configFile.name, 'r', encoding='utf-8') as config:
-        configData = json.load(config)
+@bot.tree.command(name="taskslist", description="Watch the to-do list in your schedule")  #Show the to-do list
+async def tasksList(interaction : discord.Interaction): 
+    todoListEmbed = discord.Embed(  #set the contents in the embed
+        title="Your Schedule :",
+        url='https://youtu.be/dQw4w9WgXcQ',
+        description="To-Do List",
+        color=discord.Color.random(),
+        timestamp=datetime.datetime.now()
+    )
+    todoListEmbed.set_thumbnail(url=bot.user.avatar.url)
+    todoListEmbed.set_footer(text="schedule")
 
-    try:
-        with open(configFile.name, 'w', encoding='utf-8') as config:
-            configData['TimeUnit'] = time
-            configData['LastModifiedTime'] = str(datetime.datetime.now())
-            json.dump(configData, config, indent=2, ensure_ascii=False)
+    todoListEmbed.add_field(name="Tasks", value="1145141919810", inline=False)
 
-            print(f"Modified config file at {configData['LastModifiedTime']}")
-            print(f"Changed time unit into {configData['TimeUnit']}")
+    await interaction.response.send_message(embed=todoListEmbed, ephemeral=False)  #send the embed message
+    msg = await interaction.original_response()  #get the first message which sent by this slash command
 
-            await interaction.response.send_message(f"Modified time unit to {configData['TimeUnit']}", ephemeral=False)
-    except Exception as ex:
-        print(ex)
-        await interaction.response.send_message("Error, please enter digits!", ephemeral=True)
+    #when there's a reaction to the embed message, edit it.
+    while True:
+        #to check if the user and the message is correct,
+        #if the user who added the reaction is the same as the one who used this command,
+        #and if the target of the reaction is the embed sent by this command:
+        def checkRection(reaction, user):  
+                return user == interaction.user and reaction.message.id == msg.id
+
+        reaction, user = await bot.wait_for(  #listen the reaction
+            'reaction_add',
+            timeout = None,  #this listening action doesn't expire
+            check = checkRection  #invoke the checking function
+            )
+
+        #edit original embed message
+        todoListEmbed.add_field(name=str(len(todoListEmbed.fields)), value=str(msg.id), inline=False)
+        await interaction.edit_original_response(embed=todoListEmbed)
 
 #Config commands --------------------------------
 @bot.tree.command(name="config", description="Check the bot config.")
@@ -174,7 +196,7 @@ async def checkConfig(interaction : discord.Interaction):
     with open(configFile.name, 'r', encoding='utf-8') as config:
         configData = json.load(config)
     await interaction.response.send_message(f"Bot config :\n{configData}", ephemeral=False)
-
+ 
 @bot.tree.command(name="changelanguage", description="Change your surface language.")
 @app_commands.describe(language="Type en/ch/jp/kr, en:English, ch:Chinese, jp:Japanese, kr:Korean.")
 async def changeLanguage(interaction : discord.Interaction, language : str):
@@ -210,6 +232,26 @@ async def changeLanguage(interaction : discord.Interaction, language : str):
     if not isNotChanged:  #if language changed
         await interaction.response.send_message(f"Surface language is {configData['Language']} now.", ephemeral=False)
         print(f"Change language into {configData['Language']}")
+
+@bot.tree.command(name="setyourtimeunit", description="Set time unit to measure the total time each task needs.")
+@app_commands.describe(time="If you type '30', it means it takes 30/60/90... MINUTES to finish your each task")
+async def setTimeUnit(interaction : discord.Interaction, time : int):
+    with open(configFile.name, 'r', encoding='utf-8') as config:
+        configData = json.load(config)
+
+    try:
+        with open(configFile.name, 'w', encoding='utf-8') as config:
+            configData['TimeUnit'] = time
+            configData['LastModifiedTime'] = str(datetime.datetime.now())
+            json.dump(configData, config, indent=2, ensure_ascii=False)
+
+            print(f"Modified config file at {configData['LastModifiedTime']}")
+            print(f"Changed time unit into {configData['TimeUnit']}")
+
+            await interaction.response.send_message(f"Modified time unit to {configData['TimeUnit']}", ephemeral=False)
+    except Exception as ex:
+        print(ex)
+        await interaction.response.send_message("Error, please enter digits!", ephemeral=True)
 
 #Excel commands ---------------------------------
 @bot.tree.command(name="todolist", description="test command to see the title of worksheet.")
